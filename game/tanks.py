@@ -1165,7 +1165,7 @@ class Player(Tank):
 			self.rotate(self.DIR_UP, False)
 		else:
 			self.rotate(direction, False)
-
+	'''
 	def move(self, direction):
 		""" move player if possible """
 
@@ -1227,6 +1227,80 @@ class Player(Tank):
 
 		#if no collision, move player
 		self.rect.topleft = (new_position[0], new_position[1])
+	'''
+
+	'''
+	##let's see if the tank will move
+	def update(self, time_passed):
+		Tank.update(self, time_passed)
+		if self.state == self.STATE_ALIVE and not self.paused:
+			self.move()
+	'''
+	def move(self):
+		""" move enemy if possible """
+
+		global players, enemies, bonuses
+
+		if self.state != self.STATE_ALIVE or self.paused or self.paralised:
+			return
+
+		#if self.path == []:
+		self.path = self.generatePath(None, True)
+
+		new_position = self.path.pop(0)
+
+		# move enemy
+		if self.direction == self.DIR_UP:
+			if new_position[1] < 0:
+				self.path = self.generatePath(self.direction, True)
+				return
+		elif self.direction == self.DIR_RIGHT:
+			if new_position[0] > (416 - 26):
+				self.path = self.generatePath(self.direction, True)
+				return
+		elif self.direction == self.DIR_DOWN:
+			if new_position[1] > (416 - 26):
+				self.path = self.generatePath(self.direction, True)
+				return
+		elif self.direction == self.DIR_LEFT:
+			if new_position[0] < 0:
+				self.path = self.generatePath(self.direction, True)
+				return
+
+		new_rect = pygame.Rect(new_position, [26, 26])
+
+		# collisions with tiles
+		if new_rect.collidelist(self.level.obstacle_rects) != -1:
+			self.path = self.generatePath(self.direction, True)
+			return
+
+		# collisions with other enemies
+		for enemy in enemies:
+			if enemy != self and new_rect.colliderect(enemy.rect):
+				self.turnAround()
+				self.path = self.generatePath(self.direction)
+				return
+
+		# collisions with players
+		for player in players:
+			if new_rect.colliderect(player.rect):
+				self.turnAround()
+				self.path = self.generatePath(self.direction)
+				return
+
+		# collisions with bonuses
+		for bonus in bonuses:
+			if new_rect.colliderect(bonus.rect):
+				bonuses.remove(bonus)
+
+		# if no collision, move enemy
+		self.rect.topleft = new_rect.topleft
+
+
+	def update(self, time_passed):
+		Tank.update(self, time_passed)
+		if self.state == self.STATE_ALIVE and not self.paused:
+			self.move()	
 
 	def reset(self):
 		""" reset player """
@@ -1239,6 +1313,105 @@ class Player(Tank):
 		self.paused = False
 		self.pressed = [False] * 4
 		self.state = self.STATE_ALIVE
+
+	def generatePath(self, direction = None, fix_direction = False):
+		""" If direction is specified, try continue that way, otherwise choose at random
+		"""
+
+		all_directions = [self.DIR_UP, self.DIR_RIGHT, self.DIR_DOWN, self.DIR_LEFT]
+
+		if direction == None:
+			if self.direction in [self.DIR_UP, self.DIR_RIGHT]:
+				opposite_direction = self.direction + 2
+			else:
+				opposite_direction = self.direction - 2
+			directions = all_directions
+			random.shuffle(directions)
+			directions.remove(opposite_direction)
+			directions.append(opposite_direction)
+		else:
+			if direction in [self.DIR_UP, self.DIR_RIGHT]:
+				opposite_direction = direction + 2
+			else:
+				opposite_direction = direction - 2
+
+			if direction in [self.DIR_UP, self.DIR_RIGHT]:
+				opposite_direction = direction + 2
+			else:
+				opposite_direction = direction - 2
+			directions = all_directions
+			random.shuffle(directions)
+			directions.remove(opposite_direction)
+			directions.remove(direction)
+			directions.insert(0, direction)
+			directions.append(opposite_direction)
+
+		# at first, work with general units (steps) not px
+		x = int(round(self.rect.left / 16))
+		y = int(round(self.rect.top / 16))
+
+		new_direction = None
+
+		for direction in directions:
+			if direction == self.DIR_UP and y > 1:
+				new_pos_rect = self.rect.move(0, -8)
+				if new_pos_rect.collidelist(self.level.obstacle_rects) == -1:
+					new_direction = direction
+					break
+			elif direction == self.DIR_RIGHT and x < 24:
+				new_pos_rect = self.rect.move(8, 0)
+				if new_pos_rect.collidelist(self.level.obstacle_rects) == -1:
+					new_direction = direction
+					break
+			elif direction == self.DIR_DOWN and y < 24:
+				new_pos_rect = self.rect.move(0, 8)
+				if new_pos_rect.collidelist(self.level.obstacle_rects) == -1:
+					new_direction = direction
+					break
+			elif direction == self.DIR_LEFT and x > 1:
+				new_pos_rect = self.rect.move(-8, 0)
+				if new_pos_rect.collidelist(self.level.obstacle_rects) == -1:
+					new_direction = direction
+					break
+
+		# if we can go anywhere else, turn around
+		if new_direction == None:
+			new_direction = opposite_direction
+			print("nav izejas. griezhamies")
+
+		# fix tanks position
+		if fix_direction and new_direction == self.direction:
+			fix_direction = False
+
+		self.rotate(new_direction, fix_direction)
+
+		positions = []
+
+		x = self.rect.left
+		y = self.rect.top
+
+		if new_direction in (self.DIR_RIGHT, self.DIR_LEFT):
+			axis_fix = self.nearest(y, 16) - y
+		else:
+			axis_fix = self.nearest(x, 16) - x
+		axis_fix = 0
+
+		pixels = self.nearest(random.randint(1, 12) * 32, 32) + axis_fix + 3
+
+		if new_direction == self.DIR_UP:
+			for px in range(0, pixels, self.speed):
+				positions.append([x, y-px])
+		elif new_direction == self.DIR_RIGHT:
+			for px in range(0, pixels, self.speed):
+				positions.append([x+px, y])
+		elif new_direction == self.DIR_DOWN:
+			for px in range(0, pixels, self.speed):
+				positions.append([x, y+px])
+		elif new_direction == self.DIR_LEFT:
+			for px in range(0, pixels, self.speed):
+				positions.append([x-px, y])
+
+		return positions
 
 class Game():
 
