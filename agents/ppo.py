@@ -1,25 +1,23 @@
 import gym
 import torch
 import retro
+import ray
+from ray.rllib.algorithms import ppo
+from ray.tune.logger import pretty_print
 from torch import nn
 
-from torchrl.collectors import SyncDataCollector
-from torchrl.data.replay_buffers import ReplayBuffer
-from torchrl.data.replay_buffers.samplers import SamplerWithoutReplacement
-from torchrl.data.replay_buffers.storages import LazyTensorStorage
-from torchrl.envs import (
-    Compose,
-    DoubleToFloat,
-    ObservationNorm,
-    StepCounter,
-    TransformedEnv,
-    GymWrapper,
-)
-from torchrl.envs.utils import check_env_specs, ExplorationType, set_exploration_type
-from torchrl.modules import ProbabilisticActor, TanhNormal, ValueOperator
-from torchrl.objectives import ClipPPOLoss
-from torchrl.objectives.value import GAE
-from tqdm import tqdm
+
+def random_rollout(env: gym.Env):
+    state = env.reset()
+    done = False
+    rewards = 0
+    while not done:
+        action = env.action_space.sample()
+        next_state, reward, terminated, truncated, info = env.step(action)
+        done = terminated or truncated
+        rewards += reward
+
+    return rewards
 
 
 if __name__ == "__main__":
@@ -39,20 +37,11 @@ if __name__ == "__main__":
     lmbda = 0.95
     entropy_eps = 1e-4
 
-    retro_env = retro.make(game="BattleCity-Nes", players=2, state="Start.2P.state", record=".", render_mode="rgb_array")
-    env = GymWrapper(retro_env)
+    ray.init(num_cpus=3, ignore_reinit_error=True, log_to_driver=False)
 
-    env = TransformedEnv(
-        env,
-        Compose(
-            # normalize observations
-            ObservationNorm(in_keys=["observation"]),
-            DoubleToFloat(
-                in_keys=["observation"],
-            ),
-            StepCounter(),
-        ),
-    )
+    env = retro.make(game="BattleCity-Nes", players=2, state="Start.2P.state", record=".",
+                     render_mode="rgb_array")
 
-    rollout = env.rollout(3)
-
+    algo = ppo.PPO(env=env)
+    while True:
+        print(algo.train())
