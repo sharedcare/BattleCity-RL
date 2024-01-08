@@ -1,23 +1,33 @@
-import gym
+from typing import Optional, Tuple
+
+import gymnasium as gym
 import torch
 import retro
-import ray
-from ray.rllib.algorithms import ppo
-from ray.tune.logger import pretty_print
+import numpy as np
 from torch import nn
+from stable_baselines3 import PPO
+from stable_baselines3.common.atari_wrappers import WarpFrame, MaxAndSkipEnv
 
 
-def random_rollout(env: gym.Env):
-    state = env.reset()
-    done = False
-    rewards = 0
-    while not done:
-        action = env.action_space.sample()
-        next_state, reward, terminated, truncated, info = env.step(action)
-        done = terminated or truncated
-        rewards += reward
-
-    return rewards
+# class RetroGymEnv(gym.Env):
+#     def __init__(self, env_config):
+#         self.env = retro.make(game=env_config["game"], players=env_config["num_players"], state=env_config["state"], record=".",
+#                               render_mode=env_config["render_mode"])
+#         self.observation_space = self.env.observation_space
+#         self.action_space = gym.spaces.Discrete(self.env.action_space.n)
+#
+#     def reset(
+#         self,
+#         *,
+#         seed: Optional[int] = None,
+#         options: Optional[dict] = None,
+#     ) -> Tuple[ObsType, dict]:
+#         return self.env.reset(seed, options)
+#
+#     def step(self, action: ActType) -> Tuple[ObsType, float, bool, bool, dict]:
+#         bin_action = np.binary_repr(action, width=self.action_space.n)
+#         bin_action
+#         return self.env.step(action)
 
 
 if __name__ == "__main__":
@@ -37,11 +47,30 @@ if __name__ == "__main__":
     lmbda = 0.95
     entropy_eps = 1e-4
 
-    ray.init(num_cpus=3, ignore_reinit_error=True, log_to_driver=False)
+    # ray.init(num_cpus=3, ignore_reinit_error=True, log_to_driver=False)
 
-    env = retro.make(game="BattleCity-Nes", players=2, state="Start.2P.state", record=".",
+    env = retro.make(game="BattleCity-Nes", players=1, state="Start.2P.state", record="./logs",
                      render_mode="rgb_array")
+    env = MaxAndSkipEnv(env)
+    env = WarpFrame(env)
 
-    algo = ppo.PPO(env=env)
-    while True:
-        print(algo.train())
+    model = PPO("CnnPolicy", env, verbose=1)
+    model.learn(total_timesteps=25000)
+
+    # register_env("BattleCity", RetroGymEnv)
+
+    # ray.rllib.utils.check_env(RetroGymEnv(env_config={"game": "BattleCity-Nes",
+    #                                                   "num_players": 1,
+    #                                                   "state": "Start.2P.state",
+    #                                                   "render_mode": "rgb_array",
+    #                                                   }))
+
+    # algo = ppo.PPO(env="BattleCity", config={
+    #     "env_config": {"game": "BattleCity-Nes",
+    #                    "num_players": 1,
+    #                    "state": "Start.2P.state",
+    #                    "render_mode": "rgb_array",
+    #                    },
+    # })
+    # while True:
+    #     print(algo.train())
